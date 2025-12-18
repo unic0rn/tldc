@@ -51,9 +51,12 @@ class DB:
                                 {"path": path, "checksum": checksum, "is_synced": is_synced})
         self.connection.commit()
 
-    def reset_status(self, path):
-        self.connection.execute("UPDATE sync_status SET is_synced = 0 WHERE path LIKE :path",
-                                {"path": f"{path}/%"})
+    def reset_statuses(self, cwd):
+        self.connection.execute("UPDATE sync_status SET is_synced = 0 WHERE path LIKE ? OR path = ?", (f"{cwd}/%", cwd))
+        self.connection.commit()
+
+    def reset_status(self, cwd):
+        self.connection.execute("UPDATE sync_status SET is_synced = 0 WHERE path = ?", (cwd,))
         self.connection.commit()
 
     def get_response_id(self, context):

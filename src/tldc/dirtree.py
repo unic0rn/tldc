@@ -1,95 +1,168 @@
 from pathlib import Path
 from hashlib import md5
 import os
-import sys
 from .constants import DIRTREE_EXCLUDE
 from .constants import DIRTREE_EXCLUDE_ANYWHERE
-from .constants import DIRTREE_MAXFILES
 from .db import DB
 from .logger import logger
 
 class DirTree:
     def __init__(self, cwd, db: DB):
-        self.cwd = cwd
+        self.cwd = os.path.abspath(cwd)
         self.db = db
-        self.path = Path(cwd)
+        self.path = Path(self.cwd)
+        self.root = str(self.path)
         self.files = []
-        self.statuses = {}
-        for p in self.path.glob("*"):
+        self.dirs = [self.root]
+        for p in self.path.iterdir():
             if self.check_path(p):
-                if not p.is_dir():
-                    self.files.append(str(p))
-                    self._filecount_check()
+                fstr = str(p)
+                if p.is_file():
+                    self.files.append(fstr)
                 else:
-                    for subp in p.glob("**/*"):
-                        if not subp.is_dir() and self.check_path(subp):
-                            self.files.append(str(subp))
-                            self._filecount_check()
-        for p in self.files:
-            self.refresh(p)
+                    self.dirs.append(fstr)
+                if p.is_dir():
+                    self._collect_recursive(p)
+        self.statuses = {}
+        for fullp in self.files + self.dirs:
+            self.refresh(fullp)
 
-    def _filecount_check(self):
-        if len(self.files) > DIRTREE_MAXFILES:
-            raise ValueError("1000 files and counting. Are we really doing this?")
+    def _collect_recursive(self, dirp):
+        for subp in dirp.iterdir():
+            if self.check_path(subp):
+                fstr = str(subp)
+                if subp.is_file():
+                    self.files.append(fstr)
+                else:
+                    self.dirs.append(fstr)
+                if subp.is_dir():
+                    self._collect_recursive(subp)
 
-    def get_files(self):
-        logger("Getting file list")
-        result = []
-        for fullp in self.files:
-            result.append({"path": self._to_relative(fullp), "is_synced": self.statuses[fullp]})
-        return result
+    def get_checksum(self, fullp: str) -> str:
+        p = Path(fullp)
+        if p.is_file():
+            with open(fullp, "rb") as f:
+                return md5(f.read()).hexdigest()
+        if not p.is_dir():
+            return md5(f"{fullp} is not a file or directory").hexdigest()
+        children_str = []
+        for child in sorted(p.iterdir(), key=lambda c: c.name):
+            if self.check_path(child):
+                try:
+                    mtime = int(child.stat().st_mtime)
+                except OSError:
+                    mtime = 0
+                children_str.append(f"{child.name}:{mtime}")
+        content = "\n".join(children_str).encode()
+        if not content:
+            content = b""
+        return md5(content).hexdigest()
 
-    def read_file(self, p):
+    def refresh(self, fullp: str):
+        current_checksum = self.get_checksum(fullp)
+        status = self.db.get_status(fullp)
+        is_synced = 1 if status and status["checksum"] == current_checksum and status["is_synced"] == 1 else 0
+        self.db.set_status(fullp, current_checksum, is_synced)
+        self.statuses[fullp] = is_synced
+
+    def _to_relative(self, fullp: str) -> str:
+        return str(Path(fullp).relative_to(self.cwd))
+
+    def _from_relative(self, rel: str) -> str:
+        return str(Path(f"{self.cwd}/{rel}").resolve())
+
+    def read_file(self, p: str):
         fullp = self._from_relative(p)
-        if fullp.find(f"{self.cwd}/") == 0 and fullp.find(f"{self.cwd}/.git/") == -1:
-            logger(f"Reading {fullp}")
-            file = open(fullp, "r")
-            data = file.read()
-            file.close()
-            self.mark_synced(p)
-            return data
+        pp = Path(fullp)
+        if fullp.startswith(f"{self.cwd}/") and ".git" not in fullp[len(self.cwd):]:
+            if pp.exists():
+                if pp.is_file():
+                    logger(f"Reading {p}")
+                    with open(fullp, "r") as file:
+                        data = file.read()
+                    self.mark_synced(p)
+                    return data
+                else:
+                    logger(f"AI tried to read {p}, is a directory", "warn")
+                    return f"Trying to read {p}: is a directory"
+            else:
+                logger(f"AI tried to read {p}, no such file or directory", "warn")
+                return f"Trying to read {p}: no such file or directory"
         else:
-            raise PermissionError(f"AI tried to read {fullp}, access denied.")
+            logger(f"AI tried to read {p}, access denied", "warn")
+            return f"Trying to read {p}: access denied"
 
-    def write_file(self, p, data):
+    def write_file(self, p: str, data: str):
         fullp = self._from_relative(p)
-        if fullp.find(f"{self.cwd}/") == 0 and fullp.find(f"{self.cwd}/.git/") == -1:
-            logger(f"Writing {fullp}")
-            dirp = str(Path(fullp).parent)
-            os.makedirs(dirp, exist_ok=True)
-            file = open(fullp, "w")
-            file.write(data)
-            file.close()
+        if fullp.startswith(f"{self.cwd}/") and ".git" not in fullp[len(self.cwd):]:
+            pp = Path(fullp)
+            dirp = pp.parent
+            os.makedirs(str(dirp), exist_ok=True)
+            logger(f"Writing {p}")
+            with open(fullp, "w") as file:
+                file.write(data)
             self.mark_synced(p)
+            current_dir = str(pp.parent)
+            while True:
+                self.statuses[current_dir] = 0
+                self.db.reset_status(current_dir)
+                if current_dir == self.root:
+                    break
+                current_dir = str(Path(current_dir).parent)
+            return "OK"
         else:
-            raise PermissionError(f"AI tried to write {fullp}, access denied.")
+            logger(f"AI tried to write {p}, access denied", "warn")
+            return f"Trying to write {p}: access denied"
 
-    def mark_synced(self, p):
-        fullp = self._from_relative(p)
-        checksum = md5(open(fullp, "rb").read()).hexdigest()
+    def mark_synced(self, relp: str):
+        fullp = self._from_relative(relp)
+        checksum = self.get_checksum(fullp)
         self.db.set_status(fullp, checksum, 1)
         self.statuses[fullp] = 1
 
-    def _to_relative(self, fullp):
-        return str(Path(fullp).relative_to(self.cwd))
+    def list_current_dir(self):
+        return self._list_dir_entries(".")
 
-    def _from_relative(self, p):
-        return str(Path(f"{self.cwd}/{p}").resolve())
+    def list_dir(self, relpath: str):
+        fullp = self._from_relative(relpath)
+        pp = Path(fullp)
+        if not fullp.startswith(f"{self.cwd}/"):
+            logger(f"AI tried to list {relpath}, access denied", "warn")
+            return f"Trying to list {relpath}: access denied"
+        if not pp.is_dir():
+            logger(f"AI tried to list {relpath}, not a directory", "warn")
+            return f"Trying to list {relpath}: not a directory"
+        return self._list_dir_entries(relpath)
 
-    def refresh(self, fullp):
-        status = self.db.get_status(fullp)
-        checksum = md5(open(fullp, "rb").read()).hexdigest()
-        is_synced = 1 if status and status["checksum"] == checksum and status["is_synced"] == 1 else 0
-        self.db.set_status(fullp, checksum, is_synced)
-        self.statuses[fullp] = is_synced
+    def _list_dir_entries(self, relpath: str):
+        fullp = self._from_relative(relpath)
+        logger(f"Listing {relpath}")
+        dirp = Path(fullp)
+        entries = []
+        for child in sorted(dirp.iterdir(), key=lambda c: c.name):
+            if self.check_path(child):
+                child_full = str(child.resolve())
+                child_rel = self._to_relative(child_full)
+                entries.append({
+                    "path": child_rel,
+                    "is_dir": child.is_dir(),
+                    "is_synced": self.statuses.get(child_full, 0)
+                })
+        self.mark_synced(relpath)
+        return entries
 
     def reset(self):
-        self.db.reset_status(self.cwd)
+        self.db.reset_statuses(self.cwd)
+        self.statuses = {p: 0 for p in self.statuses}
 
-    def check_path(self, p):
-        if str(p)[len(self.cwd)+1:] in DIRTREE_EXCLUDE:
+    def check_path(self, p: Path):
+        rel_start = len(self.cwd) + 1
+        rel = str(p)[rel_start:]
+        if rel in DIRTREE_EXCLUDE:
             return False
-        for subp in str(p).split("/"):
-            if subp[subp.rfind("/")+1:] in DIRTREE_EXCLUDE_ANYWHERE:
+        parts = str(p).split("/")
+        for part in parts:
+            basename = part[part.rfind("/") + 1:]
+            if basename in DIRTREE_EXCLUDE_ANYWHERE:
                 return False
         return True
