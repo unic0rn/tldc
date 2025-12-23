@@ -92,13 +92,32 @@ class DirTree:
             logger(f"AI tried to read {p}, access denied", "warn")
             return f"Trying to read {p}: access denied"
 
-    def write_file(self, p: str, data: str):
+    def write_file(self, p: str, search: str, replace: str):
         fullp = self._from_relative(p)
         if fullp.startswith(f"{self.cwd}/") and ".git" not in fullp[len(self.cwd):]:
             pp = Path(fullp)
             dirp = pp.parent
             os.makedirs(str(dirp), exist_ok=True)
-            logger(f"Writing {p}")
+            if pp.exists() and pp.is_file():
+                with open(fullp, "r") as file:
+                    data = file.read()
+            elif search != "":
+                logger(f"AI tried to update {p}, no such file", "warn")
+                return f"Trying to update {p}: no such file"
+            if search == "":
+                logger(f"Creating {p}")
+                data = replace
+            else:
+                logger(f"Updating {p}")
+                if data.count(search) != 1:
+                    search = search.replace(r'\"', '"')
+                    if data.count(search) != 1:
+                        logger(f"AI tried to update {p}, search matches != 1", "warn")
+                        return f"Trying to update {p}: search matches != 1"
+                    else:
+                        data = data.replace(search, replace)
+                else:
+                    data = data.replace(search, replace)
             with open(fullp, "w") as file:
                 file.write(data)
             self.mark_synced(p)

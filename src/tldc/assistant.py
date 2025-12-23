@@ -12,7 +12,8 @@ class ReadFileRequest(BaseModel):
 
 class WriteFileRequest(BaseModel):
     path: str = Field(description="Path to the file, relative to the working directory.")
-    text: str = Field(description="New contents of the file.")
+    search: str = Field(description="Part of the file to replace. Exactly as it appears in the file, no extra escape codes. When only adding new code, search for surrounding lines and include them in the replacement. There should be only one match. If empty, entire file will be rewritten.")
+    replace: str = Field(description="Text to replace search with. Perfectly formatted, with correct indentation, as it's supposed to look like in the file.")
 
 class ListCurrentDirRequest(BaseModel):
     pass
@@ -35,7 +36,7 @@ class Assistant:
         ),
         tool(
             name="write_file",
-            description="Writes new file contents to given path - replaces entire file. Returns OK or an error message.",
+            description="Writes file contents to given path. Returns OK or an error message.",
             parameters=WriteFileRequest.model_json_schema(),
         ),
         tool(
@@ -61,7 +62,7 @@ class Assistant:
         return self.dirtree.read_file(request.path)
 
     def write_file(self, request: WriteFileRequest):
-        return self.dirtree.write_file(request.path, request.text)
+        return self.dirtree.write_file(request.path, request.search, request.replace)
 
     def list_current_dir(self, request: ListCurrentDirRequest):
         return self.dirtree.list_current_dir()
