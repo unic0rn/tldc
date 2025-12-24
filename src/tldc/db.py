@@ -13,7 +13,6 @@ class DB:
                                       CREATE TABLE IF NOT EXISTS models (model_name primary key, provider, settings);
                                       CREATE TABLE IF NOT EXISTS contexts (context primary key, response_id);
                                       CREATE TABLE IF NOT EXISTS history (context, message);
-                                      CREATE TABLE IF NOT EXISTS sync_status (path primary key, checksum, is_synced);
                                       """)
         self.connection.execute("REPLACE INTO models VALUES(:model_name, 'ollama', :settings)",
                                 {"model_name": DEFAULT_OLLAMA_MODEL, "settings": DEFAULT_OLLAMA_SETTINGS})
@@ -25,7 +24,6 @@ class DB:
                                       VACUUM models;
                                       VACUUM contexts;
                                       VACUUM history;
-                                      VACUUM sync_status;
                                       """)
         self.connection.close()
 
@@ -40,23 +38,6 @@ class DB:
 
     def del_history(self, context):
         self.connection.execute("DELETE FROM history WHERE context = :context", {"context": context})
-        self.connection.commit()
-
-    def get_status(self, path):
-        return self.connection.execute("SELECT checksum, is_synced FROM sync_status WHERE path = :path",
-                                       {"path": path}).fetchone()
-
-    def set_status(self, path, checksum, is_synced):
-        self.connection.execute("REPLACE INTO sync_status VALUES(:path, :checksum, :is_synced)",
-                                {"path": path, "checksum": checksum, "is_synced": is_synced})
-        self.connection.commit()
-
-    def reset_statuses(self, cwd):
-        self.connection.execute("UPDATE sync_status SET is_synced = 0 WHERE path LIKE ? OR path = ?", (f"{cwd}/%", cwd))
-        self.connection.commit()
-
-    def reset_status(self, cwd):
-        self.connection.execute("UPDATE sync_status SET is_synced = 0 WHERE path = ?", (cwd,))
         self.connection.commit()
 
     def get_response_id(self, context):

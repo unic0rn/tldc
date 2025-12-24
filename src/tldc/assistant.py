@@ -41,12 +41,12 @@ class Assistant:
         ),
         tool(
             name="list_current_dir",
-            description="Returns json list of direct child entries (files and directories) in the current working directory. Paths are relative to cwd (basenames). Each entry has 'path', 'is_dir' (boolean), 'is_synced' (0 if changed since last list_current_dir or affecting write, 1 otherwise).",
+            description="Returns json list of direct child entries (files and directories) in the current working directory. Paths are relative to cwd (basenames). Each entry has 'path' and 'is_dir' (boolean).",
             parameters=ListCurrentDirRequest.model_json_schema(),
         ),
         tool(
             name="list_dir",
-            description="Returns json list of direct child entries (files and directories) in the given relative directory path. Paths are relative to cwd. Each entry has 'path', 'is_dir' (boolean), 'is_synced' (0 if changed since last list_dir on it or affecting write, 1 otherwise).",
+            description="Returns json list of direct child entries (files and directories) in the given relative directory path. Paths are relative to cwd. Each entry has 'path' and 'is_dir' (boolean).",
             parameters=ListDirRequest.model_json_schema(),
         ),
     ]
