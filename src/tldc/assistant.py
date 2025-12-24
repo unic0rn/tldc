@@ -83,7 +83,6 @@ class Assistant:
     def reset(self):
         self.db.reset_response_id(self.dirtree.cwd)
         self.db.del_history(self.dirtree.cwd)
-        self.dirtree.reset()
 
     @classmethod
     def create(cls, model, provider, settings, db: DB, dirtree: DirTree) -> 'Assistant':
