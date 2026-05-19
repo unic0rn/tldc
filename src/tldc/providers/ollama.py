@@ -80,7 +80,7 @@ class Ollama(Assistant):
             "function": {
                 "name": tool_def.function.name,
                 "description": tool_def.function.description,
-                "parameters": tool_def.function.parameters
+                "parameters": json.loads(tool_def.function.parameters)
             }
         }
 

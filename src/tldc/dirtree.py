@@ -55,10 +55,15 @@ class DirTree:
             else:
                 logger(f"Updating {p}")
                 if data.count(search) != 1:
-                    search = search.replace(r'\"', '"')
+                    search = search.replace(r'\"', '"').replace(r'\\', '\\').replace(r'\n', '\n')
+                    replace = replace.replace(r'\"', '"').replace(r'\\', '\\').replace(r'\n', '\n')
                     if data.count(search) != 1:
-                        logger(f"AI tried to update {p}, search matches != 1", "warn")
-                        return f"Trying to update {p}: search matches != 1"
+                        if data.count(search) == 0:
+                            logger(f"AI tried to update {p}, no matches", "warn")
+                            return f"Trying to update {p}: no matches"
+                        else:
+                            logger(f"AI tried to update {p}, too many matches", "warn")
+                            return f"Trying to update {p}: too many matches"
                     else:
                         data = data.replace(search, replace)
                 else:
