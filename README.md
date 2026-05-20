@@ -3,7 +3,7 @@ tl;dc
 
 ## about
 
-This is a work in progress and it'll likely stay that way for a while. It's just another agentic AI CLI tool, with a focus on xAI's response API. Support for stateless APIs is also possible, as evidenced by Ollama support - that one is borked for now though, see below.
+This is a work in progress and it'll likely stay that way for a while. It's just another agentic AI CLI tool, initially with a focus on xAI's response API. Support for stateless APIs is also possible, as evidenced by Ollama support.
 
 ## status / roadmap
 
