@@ -37,39 +37,20 @@ class DirTree:
             logger(f"AI tried to read {p}, access denied", "warn")
             return f"Trying to read {p}: access denied"
 
-    def write_file(self, p: str, search: str, replace: str):
+    def write_file(self, p: str, content: str):
         fullp = self._from_relative(p)
         if fullp.startswith(f"{self.cwd}/") and ".git" not in fullp[len(self.cwd):]:
             pp = Path(fullp)
             dirp = pp.parent
             os.makedirs(str(dirp), exist_ok=True)
             if pp.exists() and pp.is_file():
-                with open(fullp, "r") as file:
-                    data = file.read()
-            elif search != "":
-                logger(f"AI tried to update {p}, no such file", "warn")
-                return f"Trying to update {p}: no such file"
-            if search == "":
-                logger(f"Creating {p}")
-                data = replace
-            else:
-                logger(f"Updating {p}")
-                if data.count(search) != 1:
-                    search = search.replace(r'\"', '"').replace(r'\\', '\\').replace(r'\n', '\n')
-                    replace = replace.replace(r'\"', '"').replace(r'\\', '\\').replace(r'\n', '\n')
-                    if data.count(search) != 1:
-                        if data.count(search) == 0:
-                            logger(f"AI tried to update {p}, no matches", "warn")
-                            return f"Trying to update {p}: no matches"
-                        else:
-                            logger(f"AI tried to update {p}, too many matches", "warn")
-                            return f"Trying to update {p}: too many matches"
-                    else:
-                        data = data.replace(search, replace)
-                else:
-                    data = data.replace(search, replace)
+                pp.unlink()
+            elif pp.is_dir():
+                logger(f"AI tried to write {p}, it's a directory", "warn")
+                return f"Trying to write {p}: it's a directory"
+            logger(f"Writing {p}")
             with open(fullp, "w") as file:
-                file.write(data)
+                file.write(content)
             return "OK"
         else:
             logger(f"AI tried to write {p}, access denied", "warn")

@@ -2,8 +2,10 @@ from __future__ import annotations
 from typing import Type
 from pydantic import BaseModel, Field
 from xai_sdk.chat import tool
+from ddgs import DDGS
 from .db import DB
 from .dirtree import DirTree
+from .websearch import WebSearch
 
 _registry: dict[str, Type['Assistant']] = {}
 
@@ -12,8 +14,7 @@ class ReadFileRequest(BaseModel):
 
 class WriteFileRequest(BaseModel):
     path: str = Field(description="Path to the file, relative to the working directory.")
-    search: str = Field(description="Part of the file to replace. Exactly as it appears in the file, no extra escape codes. When only adding new code, search for surrounding lines and include them in the replacement. There should be only one match. If empty, entire file will be rewritten.")
-    replace: str = Field(description="Text to replace search with. Perfectly formatted, with correct indentation, as it's supposed to look like in the file.")
+    content: str = Field(description="Text to write to the file. Perfectly formatted, with correct indentation, as it's supposed to look like in the file.")
 
 class ListCurrentDirRequest(BaseModel):
     pass
@@ -21,12 +22,20 @@ class ListCurrentDirRequest(BaseModel):
 class ListDirRequest(BaseModel):
     path: str = Field(description="Relative path to the directory whose contents to list.")
 
+class WebSearchRequest(BaseModel):
+    query: str = Field(description="Search query for web search. Maximum 3 results will be returned.")
+
+class WebFetchRequest(BaseModel):
+    url: str = Field(description="Url to fetch. Content will be returned as markdown.")
+
 class Assistant:
     def __init__(self, model, provider, settings, db: DB, dirtree: DirTree):
         self.model = model
         self.provider = provider
+        self.settings = settings
         self.db = db
         self.dirtree = dirtree
+        self.websearch = WebSearch()
 
     tool_definitions = [
         tool(
@@ -49,6 +58,16 @@ class Assistant:
             description="Returns json list of direct child entries (files and directories) in the given relative directory path. Paths are relative to cwd. Each entry has 'path' and 'is_dir' (boolean).",
             parameters=ListDirRequest.model_json_schema(),
         ),
+        tool(
+            name="web_search",
+            description="Searches the web and returns up to 3 results with URLs, titles, and snippets.",
+            parameters=WebSearchRequest.model_json_schema(),
+        ),
+        tool(
+            name="web_fetch",
+            description="Fetches url contents as markdown.",
+            parameters=WebFetchRequest.model_json_schema(),
+        ),
     ]
 
     request_classes = {
@@ -56,13 +75,15 @@ class Assistant:
         "write_file": WriteFileRequest,
         "list_current_dir": ListCurrentDirRequest,
         "list_dir": ListDirRequest,
+        "web_search": WebSearchRequest,
+        "web_fetch": WebFetchRequest
     }
 
     def read_file(self, request: ReadFileRequest):
         return self.dirtree.read_file(request.path)
 
     def write_file(self, request: WriteFileRequest):
-        return self.dirtree.write_file(request.path, request.search, request.replace)
+        return self.dirtree.write_file(request.path, request.content)
 
     def list_current_dir(self, request: ListCurrentDirRequest):
         return self.dirtree.list_current_dir()
@@ -70,11 +91,19 @@ class Assistant:
     def list_dir(self, request: ListDirRequest):
         return self.dirtree.list_dir(request.path)
 
+    def web_search(self, request: WebSearchRequest):
+        return self.websearch.search(request.query)
+
+    def web_fetch(self, request: WebFetchRequest):
+        return self.websearch.fetch_content(request.url)
+
     tools_map = {
         "read_file": read_file,
         "write_file": write_file,
         "list_current_dir": list_current_dir,
         "list_dir": list_dir,
+        "web_search": web_search,
+        "web_fetch": web_fetch
     }
 
     def prompt(self, prompt):

@@ -35,8 +35,8 @@ def list():
 
 @models.command()
 @click.argument("model_name")
-@click.argument("provider")
-@click.argument("settings")
+@click.argument("provider", default="ollama")
+@click.argument("settings", default='{"url": "http://127.0.0.1:11434"}')
 def add(model_name, provider, settings):
     """Add a model"""
     context.add_model(model_name, provider, settings)

@@ -7,9 +7,14 @@ This is a work in progress and it'll likely stay that way for a while. It's just
 
 ## status / roadmap
 
-* xAI/Grok works fine.
-* Ollama does not work fine, tool calling is borked, so it's useless for now.
-* For now, only 3 tools are available to the AI: listing files, reading a file, writing a file. AI **cannot** leave current directory and **cannot** execute shell commands. This is by design.
+* xAI/Grok works fine, but grok-code-fast-1 is gone, and with it the main reason to use Grok for coding: it was inexpensive.
+* Ollama works fine (currently hardcoded temperature=0.6, keep that in mind when using Gemma 4).
+* Limited tools are available to the AI. AI **cannot** leave current directory and **cannot** execute shell commands. This is by design. Available tools:
+    * listing files and directories
+    * reading a file
+    * writing a file
+    * web search
+    * fetching websites as markdown
 
 ## manual
 
@@ -18,10 +23,15 @@ This is a work in progress and it'll likely stay that way for a while. It's just
 tldc models add grok-code-fast-1 xai '{"api_key": "<API_KEY>"}'
 tldc models set grok-code-fast-1
 ```
+* Ollama configuration:
+```bash
+tldc models add qwen3.5:35b-a3b-coding-nvfp4 ollama '{"url": "http://127.0.0.1:11434"}'
+tldc models add qwen3.5:27b-coding-nvfp4
+tldc models set qwen3.5:27b-coding-nvfp4
+```
 * For the list of available commands, just run `tldc` without parameters.
 * Active model is a global setting.
-* Context refers to the current working directory. It stores things like message history, last response ID, as well as synchronization status and checksums for all the files.
-* _All the files_ above means all the files listed as available to the AI. Some things are excluded, see `constants.py`.
+* Context refers to the current working directory. It stores things like message history.
 
 ## too lazy; didn't code
 _aka what's with the name_

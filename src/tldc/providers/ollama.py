@@ -13,6 +13,10 @@ class Ollama(Assistant):
         data = {
             "model": self.model,
             "messages": messages,
+            "options": {
+                "temperature": 0.6,
+                "presence_penalty": 0
+            },
             "stream": False
         }
         if tools:
