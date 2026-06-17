@@ -1,3 +1,4 @@
+import re
 import json
 import requests
 from ..assistant import Assistant, register
@@ -14,8 +15,11 @@ class Ollama(Assistant):
             "model": self.model,
             "messages": messages,
             "options": {
-                "temperature": 0.6,
-                "presence_penalty": 0
+                "temperature": 0.15,
+#                "top_p": 0.9,
+                "min_p": 0.01,
+#                "top_k": 40,
+                "num_ctx": 32768
             },
             "stream": False
         }
@@ -41,41 +45,55 @@ class Ollama(Assistant):
         messages = []
         for row in self.db.get_history(self.dirtree.cwd):
             messages.append(json.loads(row['message']))
+        tools = [self._format_tool(t) for t in self.tool_definitions]
         # If no history, add system prompt
+        tools_str = ""
+        for tool in tools:
+            tools_str += f"name: {tool['function']['name']}\ndescription: {tool['function']['description']}\nparameters: {tool['function']['parameters']['properties']}\nrequired: {tool['function']['parameters'].get('required')}\n\n"
         if not messages:
-            messages.append({"role": "system", "content": SYSTEM_PROMPT})
+            messages.append({"role": "system", "content": SYSTEM_PROMPT+"\n\nYou have access to the following programmatic tools to interact with the system:\n\n"+tools_str+"\nCRITICAL EXECUTION RULES:\n- To execute a tool, you MUST use the exact prefix [tool_call:] and suffix [:tool_call] wrapped around a valid JSON object.:\n[tool_call:]\n{\"name\": \"TOOL_NAME\", \"arguments\": {\"PARAM_NAME\": \"VALUE\"}}\n[:tool_call]\n\n- Do not write any conversational text before or after the tool block."})
         # Add user prompt
         user_msg = {"role": "user", "content": prompt}
         messages.append(user_msg)
         self.db.add_history(self.dirtree.cwd, json.dumps(user_msg))
         # Chat loop for tools
         while True:
-            tools = [self._format_tool(t) for t in self.tool_definitions]
-            response_data = self._call_ollama(messages, tools=tools)
+            response_data = self._call_ollama(messages)
             message = response_data["message"]
-            messages.append(message)
-            self.db.add_history(self.dirtree.cwd, json.dumps(message))
-            if "tool_calls" in message:
-                if message.get("content"):
-                    logger(f"Superfluous message content: {message['content']}")
-                tool_results = []
-                for tool_call in message["tool_calls"]:
-                    function_name = tool_call["function"]["name"]
-                    function_args = tool_call["function"]["arguments"]
+            message_content = message.get("content", "")
+            message_thinking = message.get("thinking", "")
+            message_fixed = message.copy()
+            if message_fixed.get("thinking") != None:
+                del message_fixed["thinking"]
+                message_fixed["content"] = f"<|think|>\n{message_thinking}\n<|think|>\n{message_content}"
+            messages.append(message_fixed)
+            self.db.add_history(self.dirtree.cwd, json.dumps(message_fixed))
+            tool_match = re.search(r'\[tool_call:\](.*?)\[:tool_call\]', message["content"], re.DOTALL)
+            if message_thinking != "":
+                logger(message_thinking, "thinking")
+            if tool_match:
+                try:
+                    tool_json = json.loads(tool_match.group(1).strip())
+                    function_name = tool_json.get("name")
+                    function_args = tool_json.get("arguments")
                     if isinstance(function_args, str):
                         function_args = json.loads(function_args)
                     request = self.request_classes[function_name](**function_args)
                     result = json.dumps(self.tools_map[function_name](self, request))
                     tool_msg = {
-                        "role": "tool",
-                        "content": result,
-                        "tool_call_id": tool_call["id"]
+                        "role": "user",
+                        "content": f"[tool_response:]\n{result}\n[:tool_response]"
                     }
-                    tool_results.append(tool_msg)
-                for tool_msg in tool_results:
                     messages.append(tool_msg)
                     self.db.add_history(self.dirtree.cwd, json.dumps(tool_msg))
-            else:
+                except json.JSONDecodeError:
+                    logger(f"AI output invalid JSON schema inside the tags.", "warn")
+                    error_msg = {
+                        "role": "user",
+                        "content": f"<tool_response>\nInvalid JSON schema inside the tags.\n</tool_response>"
+                    }
+                    messages.append(error_msg)
+            elif message["content"] != "":
                 return message["content"]
 
     def _format_tool(self, tool_def):

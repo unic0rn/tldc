@@ -16,9 +16,6 @@ class WriteFileRequest(BaseModel):
     path: str = Field(description="Path to the file, relative to the working directory.")
     content: str = Field(description="Text to write to the file. Perfectly formatted, with correct indentation, as it's supposed to look like in the file.")
 
-class ListCurrentDirRequest(BaseModel):
-    pass
-
 class ListDirRequest(BaseModel):
     path: str = Field(description="Relative path to the directory whose contents to list.")
 
@@ -49,11 +46,6 @@ class Assistant:
             parameters=WriteFileRequest.model_json_schema(),
         ),
         tool(
-            name="list_current_dir",
-            description="Returns json list of direct child entries (files and directories) in the current working directory. Paths are relative to cwd (basenames). Each entry has 'path' and 'is_dir' (boolean).",
-            parameters=ListCurrentDirRequest.model_json_schema(),
-        ),
-        tool(
             name="list_dir",
             description="Returns json list of direct child entries (files and directories) in the given relative directory path. Paths are relative to cwd. Each entry has 'path' and 'is_dir' (boolean).",
             parameters=ListDirRequest.model_json_schema(),
@@ -73,7 +65,6 @@ class Assistant:
     request_classes = {
         "read_file": ReadFileRequest,
         "write_file": WriteFileRequest,
-        "list_current_dir": ListCurrentDirRequest,
         "list_dir": ListDirRequest,
         "web_search": WebSearchRequest,
         "web_fetch": WebFetchRequest
@@ -84,9 +75,6 @@ class Assistant:
 
     def write_file(self, request: WriteFileRequest):
         return self.dirtree.write_file(request.path, request.content)
-
-    def list_current_dir(self, request: ListCurrentDirRequest):
-        return self.dirtree.list_current_dir()
 
     def list_dir(self, request: ListDirRequest):
         return self.dirtree.list_dir(request.path)
@@ -100,7 +88,6 @@ class Assistant:
     tools_map = {
         "read_file": read_file,
         "write_file": write_file,
-        "list_current_dir": list_current_dir,
         "list_dir": list_dir,
         "web_search": web_search,
         "web_fetch": web_fetch

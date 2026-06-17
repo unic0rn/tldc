@@ -56,10 +56,9 @@ class DirTree:
             logger(f"AI tried to write {p}, access denied", "warn")
             return f"Trying to write {p}: access denied"
 
-    def list_current_dir(self):
-        return self._list_dir_entries(".")
-
     def list_dir(self, relpath: str):
+        if relpath == ".":
+            relpath = ""
         fullp = self._from_relative(relpath)
         pp = Path(fullp)
         if not fullp.startswith(f"{self.cwd}/"):
