@@ -15,7 +15,10 @@ class DirTree:
         return str(Path(fullp).relative_to(self.cwd))
 
     def _from_relative(self, rel: str) -> str:
-        return str(Path(f"{self.cwd}/{rel}").resolve())
+        fullp = str(Path(f"{self.cwd}/{rel}").resolve())
+        if fullp == self.cwd:
+            fullp = f"{fullp}/"
+        return fullp
 
     def read_file(self, p: str):
         fullp = self._from_relative(p)
@@ -57,8 +60,6 @@ class DirTree:
             return f"Trying to write {p}: access denied"
 
     def list_dir(self, relpath: str):
-        if relpath == ".":
-            relpath = ""
         fullp = self._from_relative(relpath)
         pp = Path(fullp)
         if not fullp.startswith(f"{self.cwd}/"):
